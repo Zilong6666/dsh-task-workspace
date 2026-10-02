@@ -15,6 +15,7 @@
     "src",
     "bin",
     "scripts",
+    "skills",
     "cordis.patch.yml",
     "README.md",
     "README.zh.md",
