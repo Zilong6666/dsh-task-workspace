@@ -1,5 +1,5 @@
-url: https://github.com/zlren/dsh-task-workspace
-name: zlren/dsh-task-workspace
+url: https://github.com/Zilong6666/dsh-task-workspace
+name: Zilong6666/dsh-task-workspace
 category: workflow
 description:
   en: 'Task workspace convention: one folder per task, one PROGRESS.md per task overwritten on each update, and per-task git once the task runs long.'

@@ -31,14 +31,14 @@
     "agent"
   ],
   "license": "MIT",
-  "author": "zlren",
+  "author": "Zilong6666",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zlren/dsh-task-workspace.git"
+    "url": "git+https://github.com/Zilong6666/dsh-task-workspace.git"
   },
-  "homepage": "https://github.com/zlren/dsh-task-workspace",
+  "homepage": "https://github.com/Zilong6666/dsh-task-workspace",
   "bugs": {
-    "url": "https://github.com/zlren/dsh-task-workspace/issues"
+    "url": "https://github.com/Zilong6666/dsh-task-workspace/issues"
   },
   "engines": {
     "node": ">=20"
