@@ -13,10 +13,11 @@
  * @module dsh-task-workspace
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
 import {
   GIT_TRIGGERS,
   appendChangelog,
@@ -255,12 +256,14 @@ export function skillBody(cfg = DEFAULTS) {
   return conventionText(cfg);
 }
 
-/** Best-effort session cwd, from the workspace registry when available. */
+/** Best-effort session cwd: workspace registry, live agent, then the session log header. */
 function cwdFor(ctx, exec) {
+  const sessionId = exec?.agent?.id;
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined;
+
   try {
     const registry = ctx.get?.('workspaceRegistry');
-    const sessionId = exec?.agent?.id;
-    if (registry !== undefined && sessionId !== undefined) {
+    if (registry !== undefined && typeof registry.list === 'function') {
       for (const workspace of registry.list()) {
         if (Array.isArray(workspace.sessionIds) && workspace.sessionIds.includes(sessionId)) {
           if (typeof workspace.path === 'string' && workspace.path.length > 0) return workspace.path;
@@ -268,9 +271,70 @@ function cwdFor(ctx, exec) {
       }
     }
   } catch {
-    // Fall through to the process directory.
+    // Fall through to the live agent.
   }
-  return process.cwd();
+
+  try {
+    const agent = ctx.get?.('agents')?.get?.(sessionId);
+    for (const candidate of [
+      agent?.cwd,
+      agent?.session?.cwd,
+      agent?.session?.header?.cwd,
+      agent?.meta?.cwd,
+      agent?.options?.cwd,
+    ]) {
+      if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+    }
+  } catch {
+    // Fall through to the session log.
+  }
+
+  return sessionCwdFromLog(sessionId);
+}
+
+/**
+ * Read the session header out of its own log. The log is a concatenation of
+ * zstd frames, so only the first frame carries the `session` record.
+ */
+function sessionCwdFromLog(sessionId) {
+  const home = process.env.DSH_HOME;
+  if (typeof home !== 'string' || home.length === 0) return undefined;
+  const root = join(home, 'sessions');
+  let buckets;
+  try {
+    buckets = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+  } catch {
+    return undefined;
+  }
+  for (const bucket of buckets) {
+    for (const name of ['session.v4.jsonl.zstd', 'session.jsonl.zstd']) {
+      const file = join(root, bucket.name, sessionId, name);
+      try {
+        if (!existsSync(file)) continue;
+        const buf = readFileSync(file).subarray(0, 1 << 20);
+        const magic = Buffer.from([0x28, 0xb5, 0x2f, 0xfd]);
+        const next = buf.indexOf(magic, 4);
+        const frame = next === -1 ? buf : buf.subarray(0, next);
+        const text = zlib.zstdDecompressSync(frame).toString('utf8');
+        for (const line of text.split('\n')) {
+          const trimmed = line.trim();
+          if (trimmed.length === 0) continue;
+          let record;
+          try {
+            record = JSON.parse(trimmed);
+          } catch {
+            continue;
+          }
+          if (record?.type === 'session' && typeof record.cwd === 'string' && record.cwd.length > 0) {
+            return record.cwd;
+          }
+        }
+      } catch {
+        // Try the next candidate file.
+      }
+    }
+  }
+  return undefined;
 }
 
 /** Find an existing task by directory, or by a name/goal/folder substring. */
@@ -343,8 +407,8 @@ function taskNew(ctx, cfg, rootFor, author) {
       },
     },
     isConcurrencySafe: () => false,
-    async execute(args) {
-      const root = rootFor(args.workspace, undefined);
+    async execute(args, exec) {
+      const root = rootFor(args.workspace, exec);
       const { task, created } = createTask({
         root,
         name: args.name,
@@ -421,8 +485,8 @@ function taskProgress(ctx, cfg, rootFor, author) {
         ),
     },
     isConcurrencySafe: () => false,
-    async execute(args) {
-      const root = rootFor(args.workspace, undefined);
+    async execute(args, exec) {
+      const root = rootFor(args.workspace, exec);
       const task = findTask(root, args);
       const progressFile = findProgressFile(task.dir) ?? task.progressFile;
       if (!existsSync(progressFile)) {
@@ -535,8 +599,8 @@ function taskGit(ctx, cfg, rootFor, author) {
         ),
     },
     isConcurrencySafe: () => false,
-    async execute(args) {
-      const root = rootFor(args.workspace, undefined);
+    async execute(args, exec) {
+      const root = rootFor(args.workspace, exec);
       const task = findTask(root, args);
       if (!existsSync(task.dir)) throw new Error(`task directory does not exist: ${task.dir}`);
       const result = gitForTask(task.dir, {
@@ -605,8 +669,8 @@ function taskList(ctx, cfg, rootFor) {
         ),
     },
     isConcurrencySafe: () => true,
-    async execute(args) {
-      const root = rootFor(args.workspace, undefined);
+    async execute(args, exec) {
+      const root = rootFor(args.workspace, exec);
       const limit = Number.isFinite(args.limit) ? Math.max(1, Number(args.limit)) : 20;
       const tasks = listTasks(root).slice(0, limit);
       return {

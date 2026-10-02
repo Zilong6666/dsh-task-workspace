@@ -152,7 +152,9 @@ function firstNonEmpty(values) {
 /** Validate and create an explicit workspace root. */
 function ensureRoot(path) {
   if (isBlockedRoot(path)) {
-    throw new Error(`refusing to use ${path} as a task workspace root`);
+    throw new Error(
+      `refusing to use ${path} as a task workspace root — pass an explicit root (tool argument root, plugin config workspaceRoot, or DSH_TASK_WORKSPACE_ROOT)`,
+    );
   }
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
   return path;
@@ -160,7 +162,14 @@ function ensureRoot(path) {
 
 function isBlockedRoot(path) {
   if (path === resolve('/') || path === resolve(tmpdir())) return true;
-  return path.split(/[\\/]/).includes('node_modules');
+  if (path.split(/[\\/]/).includes('node_modules')) return true;
+  // Never file tasks inside DSH's own state (the Electron app's cwd is the
+  // profile directory, so a bare process.cwd() fallback lands here).
+  for (const internal of [process.env.DSH_HOME, process.env.DSH_PROFILE_DIR, join(homedir(), '.dsh')]) {
+    const base = firstNonEmpty([internal]);
+    if (base !== undefined && (path === base || path.startsWith(`${base}/`))) return true;
+  }
+  return false;
 }
 
 function isPlausibleRoot(path) {

@@ -154,7 +154,7 @@ profile 也可以在自己的补丁层覆盖同样的键：
 ## 开发与自测
 
 ```bash
-node test/run.mjs          # 32 项：store、工具、真实 git、CLI、宿主 JSON Schema 子集，不联网
+node test/run.mjs          # 35 项：store、工具、真实 git、CLI、宿主 JSON Schema 子集、会话 cwd 回退与内部目录护栏，不联网
 node test/run.mjs --keep   # 保留临时工作区便于检查
 ```
 

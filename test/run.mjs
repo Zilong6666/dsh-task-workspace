@@ -6,7 +6,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import zlibDefault from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { strict as assert } from 'node:assert';
@@ -355,6 +356,56 @@ await checkAsync('cli parses flags with and without values', async () => {
 });
 await checkAsync('cli selectTask finds a task by folder substring', async () => {
   assert.equal(cli.selectTask(WORK_DIR, '端到端'), created.dir);
+});
+
+// ------------------------------------------------- root guards & session cwd
+process.stdout.write('\nroot guards\n');
+check('explicit root inside DSH_HOME is refused', () => {
+  assert.throws(
+    () => store.resolveWorkspaceRoot(join(HOME_DIR, 'profiles', 'desktop'), '', WORK_DIR),
+    /refusing to use/,
+  );
+});
+check('a process.cwd under DSH_HOME is refused instead of silently used', () => {
+  const saved = process.env.DSH_TASK_WORKSPACE_ROOT;
+  delete process.env.DSH_TASK_WORKSPACE_ROOT;
+  try {
+    assert.throws(
+      () => store.resolveWorkspaceRoot(undefined, '', join(HOME_DIR, 'profiles', 'desktop')),
+      /refusing to use/,
+    );
+  } finally {
+    process.env.DSH_TASK_WORKSPACE_ROOT = saved;
+  }
+});
+await checkAsync('task_new falls back to the cwd recorded in the session log', async () => {
+  const saved = process.env.DSH_TASK_WORKSPACE_ROOT;
+  delete process.env.DSH_TASK_WORKSPACE_ROOT;
+  const sessionId = 'session-log-cwd';
+  const folder = join(HOME_DIR, 'sessions', '--fake--', sessionId);
+  mkdirSync(folder, { recursive: true });
+  const header = JSON.stringify({ type: 'session', version: 4, id: sessionId, cwd: WORK_DIR });
+  writeFileSync(
+    join(folder, 'session.v4.jsonl.zstd'),
+    zlibDefault.zstdCompressSync(Buffer.from(`${header}\n`)),
+  );
+  try {
+    const { ctx: c, state: s } = stubCtx({ withSkills: false });
+    const dispose2 = plugin.default(c, {});
+    try {
+      const tool = s.tools.get('task_new');
+      const result = await tool.execute(
+        { name: '会话日志回退' },
+        { callId: 't', name: 'task_new', arguments: {}, signal: new AbortController().signal, agent: { id: sessionId } },
+      );
+      assert.equal(result.dir, join(WORK_DIR, `${result.folder}`));
+      assert.ok(existsSync(join(result.dir, 'PROGRESS.md')));
+    } finally {
+      dispose2();
+    }
+  } finally {
+    process.env.DSH_TASK_WORKSPACE_ROOT = saved;
+  }
 });
 
 // --------------------------------------------------------------------- summary

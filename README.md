@@ -162,7 +162,7 @@ The convention's trigger is deliberately explicit — any one of:
 ## Development
 
 ```bash
-node test/run.mjs          # 32 checks: store, tools, real git, CLI, host JSON Schema subset — no network
+node test/run.mjs          # 35 checks: store, tools, real git, CLI, host JSON Schema subset, session-cwd guards — no network
 node test/run.mjs --keep   # keep the temporary workspace for inspection
 ```
 
