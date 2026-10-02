@@ -28,11 +28,13 @@
 - 顺带修掉两个打包/杂物问题：`files` 补 `skills`（原来 `skills/task-workspace/SKILL.md` 不进 npm 包）；删掉误建在插件目录里的两个空任务目录 `dbg-20261002`、`会话日志回退-20261002`。
 - 发布 tarball 预览：12 个文件、25.7 kB（LICENSE/README×2/bin/cordis.patch.yml/package.json/scripts×2/skills/SKILL.md/src×3）。
 
+- **结论：不依赖 npm 也能上架**。已建 GitHub Release `v0.1.0`（资产 `dsh-task-workspace-0.1.0.tgz`，25.7 kB，https://github.com/Zilong6666/dsh-task-workspace/releases/tag/v0.1.0 ）；市场条目加 `tarball:` 指向该资产；已用 bundled pnpm 实测 `pnpm add <tarball-url>` 安装成功，装出的目录含 `dsh.bundle` 与 `skills/task-workspace/SKILL.md`。npm 侧因账号无 2FA 且 granular token 页面「Select organizations」为空（无组织可选）而卡死，暂不阻塞上架。
+
 ## 下一步
 
-- **npm 发布**：用户二选一——① 在 https://www.npmjs.com/settings/grandparen/tfa 开启 2FA 后，发布时把 6 位 OTP 给我，我执行 `npm publish --otp=<code> --access public`；② 在 https://www.npmjs.com/settings/grandparen/tokens 建 Granular Access Token（read+write、勾选 bypass 2FA、短有效期），把 token 给我写入 `~/.npmrc` 后发布（发布完可撤销）。
-- **市场 PR**：2026-10-03 07:45Z 之后，用已备好的分支 `add-dsh-task-workspace` 向 awesome-dsh-plugin 提 PR。
+- **市场 PR**：2026-10-03 07:45Z（北京时间 15:45）之后，用已备好的分支 `add-dsh-task-workspace`（最新 commit `20b6c0f`，含 tarball 字段）向 awesome-dsh-plugin 提 PR。
 - **用户重启 DSH 应用**后，cwd 修复才在桌面端生效（当前运行进程里仍是旧代码）。
+- 可选（不着急）：给 npm 账号 `grandparen` 开 2FA（用任意 TOTP 应用，npm 会同时给出可手输的 setup key）后再补一次 `npm publish`，让市场条目能走 npm 装法。
 - 可选清理：dsh plugin --profile web remove dsh-task-workspace（验证用的 web profile 安装）
 
 ## 产出物
@@ -64,5 +66,6 @@
 | 2026-10-02 17:55 | 真机启动暴露 inject bug → `inject` 挂到 `apply` 属性；真机暴露 output.schema 的 `required` 用法 bug → 改对象级并加自测；新增 `scripts/install-into-profile.sh` + `append-bundle.mjs`（只改 bundles 数组）；自测 32 passed；真实 Cordis 容器验证 4 工具 + 1 段落 + 1 技能注册成功 |
 | 2026-10-02 18:10 | 装进 desktop profile 并在本会话验证四个工具已可用；PUBLISH.md 发布指引 |
 | 2026-10-02 15:45 | GitHub 登录完成，实际账号 `Zilong6666` → 全项目 owner 由 zlren 改为 Zilong6666；`gh repo create` 建库并推送，加 topic `dsh-plugin`；npm 登录完成（账号 `grandparen`），`npm publish` 被 2FA 拦截（E403） |
+| 2026-10-02 16:05 | npm 2FA 路线受阻（无验证器；granular token 页面 Select organizations 空列表卡死）→ 改用 GitHub Release tarball：建 `v0.1.0` 资产、市场条目加 `tarball:`、bundled pnpm 实测从 URL 安装成功；fork 分支更新为 `20b6c0f` |
 | 2026-10-02 15:50 | 修 `files` 缺 `skills`；删掉误建的两个空任务目录；fork awesome-dsh-plugin 并推分支 `add-dsh-task-workspace`（commit 8e5d01d），PR 待仓库满 1 天后开 |
 | 2026-10-02 15:30（会话整理任务中发现） | 修第四个真机 bug：四个工具 `execute(args)` 未接 `exec`、`rootFor(args.workspace, undefined)`，cwd 永远解析不到而退回 `process.cwd()`；改 `execute(args, exec)`+`rootFor(..., exec)`，`cwdFor` 增加 workspaceRegistry → agents.get → 会话日志首帧三级回退，`isBlockedRoot` 拒绝 DSH_HOME/DSH_PROFILE_DIR 及其子目录；补 3 项回归测试，自测 **35 passed** |
