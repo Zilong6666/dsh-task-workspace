@@ -1,0 +1,8 @@
+# dsh-task-workspace bundle patch
+#
+# Every dsh profile that installs this package composes the plugin below.
+# A profile may override the Config by adding an id-targeted entry after this
+# bundle layer (see README for the config keys).
+- insert:
+    - id: task-workspace
+      name: 'dsh-task-workspace'

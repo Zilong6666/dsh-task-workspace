@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "tasks": {
+    "CLI-冒烟-20261002": {
+      "id": "tmuqminxbf76dc8",
+      "folder": "CLI-冒烟-20261002",
+      "name": "CLI 冒烟",
+      "goal": "验证 CLI 三个命令",
+      "createdAt": "2026-10-02T07:10:23.135Z",
+      "lastSeen": "2026-10-02T07:10:23.135Z"
+    }
+  }
+}

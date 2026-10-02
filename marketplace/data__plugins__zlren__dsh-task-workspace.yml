@@ -1,0 +1,6 @@
+url: https://github.com/zlren/dsh-task-workspace
+name: zlren/dsh-task-workspace
+category: workflow
+description:
+  en: 'Task workspace convention: one folder per task, one PROGRESS.md per task overwritten on each update, and per-task git once the task runs long.'
+  zh: '任务工作区约定：一个任务一个目录，一个任务一个 PROGRESS.md（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。'

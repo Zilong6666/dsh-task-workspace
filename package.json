@@ -1,0 +1,51 @@
+{
+  "name": "dsh-task-workspace",
+  "version": "0.1.0",
+  "description": "Task workspace convention for DSH: one folder per task, one PROGRESS.md per task (overwritten on every update), git init when the task runs long.",
+  "type": "module",
+  "main": "./src/index.mjs",
+  "exports": {
+    ".": "./src/index.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-task": "./bin/dsh-task.mjs"
+  },
+  "files": [
+    "src",
+    "bin",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "task",
+    "progress",
+    "workspace",
+    "workflow",
+    "git",
+    "agent"
+  ],
+  "license": "MIT",
+  "author": "zlren",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zlren/dsh-task-workspace.git"
+  },
+  "homepage": "https://github.com/zlren/dsh-task-workspace",
+  "bugs": {
+    "url": "https://github.com/zlren/dsh-task-workspace/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}
