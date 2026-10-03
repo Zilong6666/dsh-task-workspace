@@ -42,7 +42,7 @@ const USAGE = `dsh-task — 任务工作区约定 CLI
                     [--goal <文本>] [--no-commit] [--root <目录>]
   dsh-task git <任务目录|任务名> [--message <消息>] [--no-commit] [--root <目录>]
   dsh-task list [--limit <N>] [--root <目录>]
-  dsh-task tidy [--apply] [--index-file <文件>] [--no-index] [--json] [--root <目录>]
+  dsh-task tidy [--apply] [--empty-dirs] [--index-file <文件>] [--no-index] [--json] [--root <目录>]
   dsh-task config [--root <目录>] [--no-git]
 `;
 
@@ -216,7 +216,10 @@ function cmdTidy(args) {
   const rootDir = root(args.flags);
   const dryRun = args.flags.apply !== true;
   const scan = scanWorkspace(rootDir);
-  const { removed, warnings, freed_bytes } = applyCleanup(scan, { dryRun });
+  const { removed, skipped, warnings, freed_bytes } = applyCleanup(scan, {
+    dryRun,
+    emptyDirs: args.flags['empty-dirs'] === true || args.flags.empty_dirs === true,
+  });
   let indexFile = '';
   if (args.flags.index !== false) {
     indexFile = writeIndex(rootDir, renderIndex(scan, { removed: dryRun ? [] : removed }), {
@@ -234,6 +237,7 @@ function cmdTidy(args) {
           task_count: scan.totals.tasks,
           junk_count: scan.junk.length,
           stray_count: scan.strays.length,
+          empty_dir_count: skipped.length,
           removed: removed.map((item) => item.rel),
           freed_bytes,
           heavy: scan.totals.heavy.map((entry) => `${entry.name}（${formatBytes(entry.bytes)}）`),
@@ -254,6 +258,7 @@ function cmdTidy(args) {
       (scan.totals.heavy.length > 0
         ? `大体积中间产物（未动）：${scan.totals.heavy.map((entry) => `${entry.name} ${formatBytes(entry.bytes)}`).join('、')}\n`
         : '') +
+      (skipped.length > 0 ? `空目录 ${skipped.length} 个：仅提示，未删除（要删加 --empty-dirs）\n` : '') +
       (indexFile.length > 0 ? `索引：${indexFile}\n` : '') +
       (warnings.length > 0 ? `${warnings.map((item) => `警告：${item}`).join('\n')}\n` : ''),
   );

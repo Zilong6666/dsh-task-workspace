@@ -383,11 +383,30 @@ check('collectJunk finds OS litter, caches, backups and empty folders only', () 
 await checkAsync('applyCleanup removes the candidates and nothing else', async () => {
   const root = join(WORK_DIR, '垃圾测试');
   const scan = tidy.scanWorkspace(root, { home: HOME_DIR });
-  const { removed, freed_bytes } = tidy.applyCleanup(scan, { dryRun: false });
-  assert.ok(removed.length >= 4);
+  const { removed, skipped, freed_bytes } = tidy.applyCleanup(scan, { dryRun: false });
+  assert.ok(removed.length >= 3);
   assert.ok(freed_bytes > 0);
   assert.equal(existsSync(join(root, '.DS_Store')), false);
   assert.equal(existsSync(join(root, 'sub', '__pycache__')), false);
+  assert.equal(existsSync(join(root, 'sub', 'keep.md')), true);
+  assert.deepEqual(
+    skipped.map((item) => item.rel),
+    ['sub/空'],
+    'an empty folder is reported, never deleted by default',
+  );
+  assert.equal(existsSync(join(root, 'sub', '空')), true);
+});
+
+check('applyCleanup only removes an empty folder when explicitly asked', () => {
+  const root = join(WORK_DIR, '垃圾测试');
+  const forced = tidy.applyCleanup(tidy.scanWorkspace(root, { home: HOME_DIR }), {
+    dryRun: false,
+    emptyDirs: true,
+  });
+  assert.deepEqual(
+    forced.removed.map((item) => item.rel),
+    ['sub/空'],
+  );
   assert.equal(existsSync(join(root, 'sub', '空')), false);
   assert.equal(existsSync(join(root, 'sub', 'keep.md')), true);
 });

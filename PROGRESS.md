@@ -11,7 +11,7 @@
 
 ## 当前进度
 
-0.2.0：新增 task_tidy / dsh-task tidy（工作区分类 + 索引 + 安全清理，默认 dry run）；readTask 目标支持回退到 ## 目标 段落；自测 41 项全过。
+0.2.1：空目录改为只提示不删除（applyCleanup 新增 emptyDirs 选项，工具参数 empty_dirs / CLI --empty-dirs）；c819/source/parts 与 nsca568-build/parts/_frag-patterns1 曾被 0.2.0 当空目录删掉，已 mkdir 恢复。自测 42 项。
 ## 上线进展（2026-10-02）
 
 - GitHub 身份：实际账号是 **`Zilong6666`**（不是 zlren）。已把 `package.json`（author/repository/homepage/bugs）、`LICENSE`、`marketplace/*.yml`、`marketplace/PUBLISH.md` 内的 owner 全部改为 Zilong6666。
@@ -25,7 +25,7 @@
 
 ## 下一步
 
-- 发 v0.2.0 Release 并更新市场条目 tarball URL
+- 重发 Release v0.2.1 并更新市场条目 tarball URL
 
 ## 产出物
 
@@ -60,4 +60,5 @@
 | 2026-10-02 15:50 | 修 `files` 缺 `skills`；删掉误建的两个空任务目录；fork awesome-dsh-plugin 并推分支 `add-dsh-task-workspace`（commit 8e5d01d），PR 待仓库满 1 天后开 |
 | 2026-10-02 15:30（会话整理任务中发现） | 修第四个真机 bug：四个工具 `execute(args)` 未接 `exec`、`rootFor(args.workspace, undefined)`，cwd 永远解析不到而退回 `process.cwd()`；改 `execute(args, exec)`+`rootFor(..., exec)`，`cwdFor` 增加 workspaceRegistry → agents.get → 会话日志首帧三级回退，`isBlockedRoot` 拒绝 DSH_HOME/DSH_PROFILE_DIR 及其子目录；补 3 项回归测试，自测 **35 passed** |
 - 加第 5 个工具 task_tidy + src/tidy.mjs + CLI tidy，补 6 项测试（35→41），文档同步，版本 0.2.0
+- 修空目录误删：默认跳过空目录，仅在显式要求时删除；补 1 项测试（41→42）；文档同步；版本 0.2.1
 

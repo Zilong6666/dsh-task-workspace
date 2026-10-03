@@ -418,7 +418,10 @@ export function renderIndex(scan, { removed = [], indexFile = INDEX_FILE, now = 
     }
     if (junk.length > 0) {
       lines.push(`垃圾文件/缓存（展示前 ${Math.min(junk.length, 40)} 项，共 ${junk.length} 项）：`);
-      for (const item of junk.slice(0, 40)) lines.push(`- \`${item.rel}\` — ${item.reason}`);
+      for (const item of junk.slice(0, 40)) {
+        const manual = item.reason === '空目录' ? '（空目录：仅提示，不自动删除）' : '';
+        lines.push(`- \`${item.rel}\` — ${item.reason}${manual}`);
+      }
       if (junk.length > 40) lines.push(`- …其余 ${junk.length - 40} 项`);
     }
   }
@@ -437,11 +440,20 @@ export function writeIndex(root, markdown, { file = INDEX_FILE, dryRun = false }
 /**
  * Remove the safe candidates only: junk files, cache dirs, and stray task
  * folders. Returns what was (or would be) removed.
+ *
+ * Empty folders are never removed by default: an empty `parts/` output
+ * directory is indistinguishable from a placeholder a build script expects, so
+ * it is reported and skipped unless the caller passes `emptyDirs: true`.
  */
-export function applyCleanup(scan, { dryRun = true } = {}) {
+export function applyCleanup(scan, { dryRun = true, emptyDirs = false } = {}) {
   const removed = [];
+  const skipped = [];
   const warnings = [];
   for (const item of scan.junk) {
+    if (item.reason === '空目录' && !emptyDirs) {
+      skipped.push({ path: item.path, rel: item.rel, reason: item.reason, bytes: item.bytes });
+      continue;
+    }
     removed.push({ path: item.path, rel: item.rel, reason: item.reason, bytes: item.bytes });
     if (!dryRun) {
       try {
@@ -466,5 +478,5 @@ export function applyCleanup(scan, { dryRun = true } = {}) {
       }
     }
   }
-  return { removed, warnings, freed_bytes: removed.reduce((sum, item) => sum + (Number(item.bytes) || 0), 0) };
+  return { removed, skipped, warnings, freed_bytes: removed.reduce((sum, item) => sum + (Number(item.bytes) || 0), 0) };
 }

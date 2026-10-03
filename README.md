@@ -109,12 +109,14 @@ Tidies the workspace the convention created it in:
 - reports the heavy intermediate folders (over 200 MB) without touching them;
 - **dry run unless `apply: true`**, and even then it only removes provably
   disposable things: `.DS_Store` and friends, `__pycache__` / `.pytest_cache`,
-  `*.pyc` / `*.bak` / `*.orig` / `*.tmp` / `*.tgz`, empty nested folders, and a
+  `*.pyc` / `*.bak` / `*.orig` / `*.tmp` / `*.tgz`, and a
   task folder that landed outside the workspace holding nothing but its own
   `PROGRESS.md` (the "wrong cwd" accident) — never task content, never a README.
+- empty folders are listed but **not** deleted (an empty `parts/` may be a
+  placeholder a build script expects); pass `empty_dirs: true` to remove them too.
 
 ```jsonc
-{ "workspace": "/path/to/workspace", "apply": true, "index": true }
+{ "workspace": "/path/to/workspace", "apply": true, "index": true, "empty_dirs": false }
 ```
 
 > The index is regenerated on every run and is meant to be read, not edited.
@@ -183,7 +185,7 @@ The convention's trigger is deliberately explicit — any one of:
 ## Development
 
 ```bash
-node test/run.mjs          # 41 checks: store, tools, real git, CLI, host JSON Schema subset, session-cwd guards — no network
+node test/run.mjs          # 42 checks: store, tools, real git, CLI, host JSON Schema subset, session-cwd guards — no network
 node test/run.mjs --keep   # keep the temporary workspace for inspection
 ```
 

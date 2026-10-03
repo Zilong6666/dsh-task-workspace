@@ -153,6 +153,7 @@ const OUT_TIDY = {
     root: { type: 'string' },
     index_file: { type: 'string' },
     applied: { type: 'boolean' },
+    empty_dir_count: { type: 'integer' },
     entry_count: { type: 'integer' },
     task_count: { type: 'integer' },
     junk_count: { type: 'integer' },
@@ -741,6 +742,10 @@ function taskTidy(ctx, cfg, rootFor) {
           description: 'Actually delete the safe candidates (default false: report only).',
         },
         index: { type: 'boolean', description: 'Write/refresh the index file (default true).' },
+        empty_dirs: {
+          type: 'boolean',
+          description: 'Also remove empty folders (default false: they are reported but kept, since a build script may expect them).',
+        },
         index_file: { type: 'string', description: `Index file name (default ${INDEX_FILE}).` },
       },
     },
@@ -754,6 +759,7 @@ function taskTidy(ctx, cfg, rootFor) {
             : `待清理 ${value.removed.length} 项（dry run，未删除）。`,
         ];
         if (value.index_file.length > 0) lines.push(`索引：${value.index_file}`);
+        if (value.empty_dir_count > 0) lines.push(`空目录 ${value.empty_dir_count} 个：仅提示，未删除。`);
         if (value.removed.length > 0) {
           lines.push(
             ...value.removed.slice(0, 20).map((item) => `- ${item}`),
@@ -771,7 +777,10 @@ function taskTidy(ctx, cfg, rootFor) {
       const root = rootFor(args.workspace, exec);
       const scan = scanWorkspace(root);
       const dryRun = args.apply !== true;
-      const { removed, warnings, freed_bytes } = applyCleanup(scan, { dryRun });
+      const { removed, skipped, warnings, freed_bytes } = applyCleanup(scan, {
+        dryRun,
+        emptyDirs: args.empty_dirs === true,
+      });
       let indexFile = '';
       if (args.index !== false) {
         indexFile = writeIndex(root, renderIndex(scan, { removed: dryRun ? [] : removed }), {
@@ -782,6 +791,7 @@ function taskTidy(ctx, cfg, rootFor) {
         root,
         index_file: indexFile,
         applied: !dryRun,
+        empty_dir_count: skipped.length,
         entry_count: scan.totals.entries,
         task_count: scan.totals.tasks,
         junk_count: scan.junk.length,
