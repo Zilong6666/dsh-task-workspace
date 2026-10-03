@@ -11,7 +11,7 @@
 
 ## 当前进度
 
-0.2.1：空目录改为只提示不删除（applyCleanup 新增 emptyDirs 选项，工具参数 empty_dirs / CLI --empty-dirs）；c819/source/parts 与 nsca568-build/parts/_frag-patterns1 曾被 0.2.0 当空目录删掉，已 mkdir 恢复。自测 42 项。
+0.2.1：空目录改为只提示不删除（applyCleanup 新增 emptyDirs 选项，工具参数 empty_dirs / CLI --empty-dirs）；中间产物-NSCA-CSCS教材OCR-20260929/source/parts 与 NSCA-CPSS知识包-20261002/parts/_frag-patterns1 曾被 0.2.0 当空目录删掉，已 mkdir 恢复。自测 42 项。
 ## 上线进展（2026-10-02）
 
 - GitHub 身份：实际账号是 **`Zilong6666`**（不是 zlren）。已把 `package.json`（author/repository/homepage/bugs）、`LICENSE`、`marketplace/*.yml`、`marketplace/PUBLISH.md` 内的 owner 全部改为 Zilong6666。

@@ -14,7 +14,7 @@ git config user.name      # 当前为空；下面用 -c 临时指定
 ## 1. 建仓库并推送
 
 ```bash
-cd /Users/zlren/Desktop/deepseekai工作区/dsh-task-workspace-20261002
+cd /Users/zlren/Desktop/deepseekai工作区/按任务分文件夹与进度文件管理-插件-20261002
 
 # 仓库名必须是 dsh-task-workspace（与 package.json 的 repository 字段一致，
 # 也决定市场条目里的 url 与文件名）
@@ -61,7 +61,7 @@ gh repo fork awesome-dsh-plugin/awesome-dsh-plugin --clone
 cd awesome-dsh-plugin
 
 # 把本仓库准备好的文件放进去（文件名规则：<owner>__<repo>.yml）
-cp /Users/zlren/Desktop/deepseekai工作区/dsh-task-workspace-20261002/marketplace/data__plugins__Zilong6666__dsh-task-workspace.yml \
+cp /Users/zlren/Desktop/deepseekai工作区/按任务分文件夹与进度文件管理-插件-20261002/marketplace/data__plugins__Zilong6666__dsh-task-workspace.yml \
    data/plugins/Zilong6666__dsh-task-workspace.yml
 
 git checkout -b add-dsh-task-workspace
