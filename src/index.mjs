@@ -34,6 +34,7 @@ import {
   setGoal,
   setSection,
 } from './store.mjs';
+import { INDEX_FILE, applyCleanup, formatBytes, renderIndex, scanWorkspace, writeIndex } from './tidy.mjs';
 
 export const name = 'dsh-task-workspace';
 
@@ -134,6 +135,35 @@ const OUT_PROGRESS = {
   },
 };
 
+const OUT_TIDY = {
+  type: 'object',
+  additionalProperties: false,
+  required: [
+    'root',
+    'index_file',
+    'applied',
+    'entry_count',
+    'task_count',
+    'junk_count',
+    'stray_count',
+    'removed',
+    'freed_bytes',
+  ],
+  properties: {
+    root: { type: 'string' },
+    index_file: { type: 'string' },
+    applied: { type: 'boolean' },
+    entry_count: { type: 'integer' },
+    task_count: { type: 'integer' },
+    junk_count: { type: 'integer' },
+    stray_count: { type: 'integer' },
+    removed: { type: 'array', items: { type: 'string' } },
+    freed_bytes: { type: 'integer' },
+    heavy: { type: 'array', items: { type: 'string' } },
+    warnings: { type: 'array', items: { type: 'string' } },
+  },
+};
+
 /**
  * Host plugin entry.
  *
@@ -169,6 +199,7 @@ export function apply(ctx, config) {
     disposers.push(ctx.tools.register(taskProgress(ctx, cfg, rootFor, author)));
     disposers.push(ctx.tools.register(taskGit(ctx, cfg, rootFor, author)));
     disposers.push(ctx.tools.register(taskList(ctx, cfg, rootFor)));
+    disposers.push(ctx.tools.register(taskTidy(ctx, cfg, rootFor)));
   }
 
   const skills = ctx.get?.('skills');
@@ -684,6 +715,81 @@ function taskList(ctx, cfg, rootFor) {
           updated_at: entry.updatedAt,
           git: entry.hasGit,
         })),
+      };
+    },
+  });
+}
+
+/**
+ * `task_tidy` — index the workspace and clear out provably disposable files.
+ *
+ * Dry run by default: the tool reports what it would delete and only removes
+ * anything when `apply: true`. The index file is (re)written either way.
+ */
+function taskTidy(ctx, cfg, rootFor) {
+  return defineTool({
+    name: 'task_tidy',
+    description:
+      'Tidy the workspace: classify every top-level entry (task / output / intermediate / tooling), rewrite the index file, and clear OS litter, caches, stale backups, packed tarballs and stray task folders. Dry run unless apply=true.',
+    parameters: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        workspace: { type: 'string', description: 'Workspace root; defaults to the session workspace.' },
+        apply: {
+          type: 'boolean',
+          description: 'Actually delete the safe candidates (default false: report only).',
+        },
+        index: { type: 'boolean', description: 'Write/refresh the index file (default true).' },
+        index_file: { type: 'string', description: `Index file name (default ${INDEX_FILE}).` },
+      },
+    },
+    output: {
+      schema: OUT_TIDY,
+      render: (_args, value) => {
+        const lines = [
+          `${value.root}：${value.entry_count} 个顶层条目，其中任务 ${value.task_count} 个。`,
+          value.applied
+            ? `已清理 ${value.removed.length} 项，释放 ${formatBytes(value.freed_bytes)}。`
+            : `待清理 ${value.removed.length} 项（dry run，未删除）。`,
+        ];
+        if (value.index_file.length > 0) lines.push(`索引：${value.index_file}`);
+        if (value.removed.length > 0) {
+          lines.push(
+            ...value.removed.slice(0, 20).map((item) => `- ${item}`),
+            ...(value.removed.length > 20 ? [`- …其余 ${value.removed.length - 20} 项`] : []),
+          );
+        }
+        if (value.heavy.length > 0) {
+          lines.push(...value.heavy.map((item) => `大体积中间产物（未动）：${item}`));
+        }
+        if (value.warnings.length > 0) lines.push(...value.warnings.map((item) => `警告：${item}`));
+        return text(lines.join('\n'));
+      },
+    },
+    async execute(args, exec) {
+      const root = rootFor(args.workspace, exec);
+      const scan = scanWorkspace(root);
+      const dryRun = args.apply !== true;
+      const { removed, warnings, freed_bytes } = applyCleanup(scan, { dryRun });
+      let indexFile = '';
+      if (args.index !== false) {
+        indexFile = writeIndex(root, renderIndex(scan, { removed: dryRun ? [] : removed }), {
+          file: typeof args.index_file === 'string' && args.index_file.length > 0 ? args.index_file : INDEX_FILE,
+        });
+      }
+      return {
+        root,
+        index_file: indexFile,
+        applied: !dryRun,
+        entry_count: scan.totals.entries,
+        task_count: scan.totals.tasks,
+        junk_count: scan.junk.length,
+        stray_count: scan.strays.length,
+        removed: removed.map((item) => item.rel),
+        freed_bytes,
+        heavy: scan.totals.heavy.map((entry) => `${entry.name}（${formatBytes(entry.bytes)}）`),
+        warnings,
       };
     },
   });

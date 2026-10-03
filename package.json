@@ -1,6 +1,6 @@
 {
   "name": "dsh-task-workspace",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Task workspace convention for DSH: one folder per task, one PROGRESS.md per task (overwritten on every update), git init when the task runs long.",
   "type": "module",
   "main": "./src/index.mjs",

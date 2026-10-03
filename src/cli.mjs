@@ -30,6 +30,7 @@ import {
   setGoal,
   setSection,
 } from './store.mjs';
+import { applyCleanup, formatBytes, renderIndex, scanWorkspace, writeIndex } from './tidy.mjs';
 import { DEFAULTS, loadConfig, saveConfig } from './index.mjs';
 
 const USAGE = `dsh-task — 任务工作区约定 CLI
@@ -41,6 +42,7 @@ const USAGE = `dsh-task — 任务工作区约定 CLI
                     [--goal <文本>] [--no-commit] [--root <目录>]
   dsh-task git <任务目录|任务名> [--message <消息>] [--no-commit] [--root <目录>]
   dsh-task list [--limit <N>] [--root <目录>]
+  dsh-task tidy [--apply] [--index-file <文件>] [--no-index] [--json] [--root <目录>]
   dsh-task config [--root <目录>] [--no-git]
 `;
 
@@ -210,6 +212,53 @@ function cmdConfig(args) {
   process.stdout.write(`${file}\n`);
 }
 
+function cmdTidy(args) {
+  const rootDir = root(args.flags);
+  const dryRun = args.flags.apply !== true;
+  const scan = scanWorkspace(rootDir);
+  const { removed, warnings, freed_bytes } = applyCleanup(scan, { dryRun });
+  let indexFile = '';
+  if (args.flags.index !== false) {
+    indexFile = writeIndex(rootDir, renderIndex(scan, { removed: dryRun ? [] : removed }), {
+      file: flag(args.flags, 'index-file') ?? flag(args.flags, 'index_file') ?? undefined,
+    });
+  }
+  if (args.flags.json === true) {
+    process.stdout.write(
+      `${JSON.stringify(
+        {
+          root: rootDir,
+          index_file: indexFile,
+          applied: !dryRun,
+          entry_count: scan.totals.entries,
+          task_count: scan.totals.tasks,
+          junk_count: scan.junk.length,
+          stray_count: scan.strays.length,
+          removed: removed.map((item) => item.rel),
+          freed_bytes,
+          heavy: scan.totals.heavy.map((entry) => `${entry.name}（${formatBytes(entry.bytes)}）`),
+          warnings,
+        },
+        null,
+        2,
+      )}\n`,
+    );
+    return;
+  }
+  process.stderr.write(
+    `${rootDir}：${scan.totals.entries} 个顶层条目，任务 ${scan.totals.tasks} 个\n` +
+      (dryRun
+        ? `待清理 ${removed.length} 项（dry run，未删除；加 --apply 执行）：\n`
+        : `已清理 ${removed.length} 项，释放 ${formatBytes(freed_bytes)}：\n`) +
+      (removed.length > 0 ? `${removed.map((item) => `  ${item.rel}`).join('\n')}\n` : '') +
+      (scan.totals.heavy.length > 0
+        ? `大体积中间产物（未动）：${scan.totals.heavy.map((entry) => `${entry.name} ${formatBytes(entry.bytes)}`).join('、')}\n`
+        : '') +
+      (indexFile.length > 0 ? `索引：${indexFile}\n` : '') +
+      (warnings.length > 0 ? `${warnings.map((item) => `警告：${item}`).join('\n')}\n` : ''),
+  );
+}
+
 function mdList(value) {
   return value
     .split('\n')
@@ -242,6 +291,9 @@ async function main() {
       return 0;
     case 'config':
       cmdConfig(args);
+      return 0;
+    case 'tidy':
+      cmdTidy(args);
       return 0;
     case 'defaults':
       process.stdout.write(`${JSON.stringify(DEFAULTS, null, 2)}\n`);

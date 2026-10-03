@@ -11,14 +11,7 @@
 
 ## 当前进度
 
-插件本体、文档、市场条目、自测、真机加载全部完成，**已装进 desktop profile 并在当前会话中生效**（本会话可调用 task_new/task_progress/task_git/task_list 四个工具，系统提示里已注入「任务工作区约定」段落）。
-
-- **实现**：`src/store.mjs`（纯函数：任务目录/索引/PROGRESS 六段/长摘要自动压缩/git 提交）、`src/index.mjs`（Host 插件：1 个提示词段落 + 4 个工具 + 1 个技能）、`src/cli.mjs` + `bin/dsh-task.mjs`（命令行）、`cordis.patch.yml`。
-- **自测**：`node test/run.mjs` = **35 passed, 0 failed**（store + 插件装配 + 真实 git + CLI + 宿主 JSON Schema 子集符合性 + 会话 cwd 回退与内部目录护栏），不联网、不需要模型。
-- **真机验证链**：web profile 安装 → 启动 8099 日志 **0 warning** → 真实 Cordis 容器 `registry.plugin()` 注册出 4 工具 + 1 段落 + 1 技能 → `--dump-config` 出现该 bundle → 装进 desktop profile → 本会话 `cordis_inspect_query host/Tool/listTools` 查得 `task_new`/`task_progress`/`task_git`/`task_list` 四个工具均在列。
-- **四个真机才暴露的 bug 已修**：① `inject` 被 loader 的 `unwrapExports` 丢掉（须挂到导出函数属性 `apply.inject`）；② 输出 schema 的 `required` 是对象级关键字（不能写在标量属性上）；③ 宿主进程 cwd 是 `~/.dsh/profiles/desktop`，四个工具从未把 `exec` 传给 `rootFor`，导致任务目录被建到 DSH 内部目录（改 `execute(args, exec)` + `cwdFor` 三级回退 + `isBlockedRoot` 拒绝 DSH_HOME/DSH_PROFILE_DIR）；④ 更早的 git 参数顺序 / 显式 root / Markdown 空行问题。
-- **desktop profile 安装**：`bash scripts/install-into-profile.sh desktop` 已执行，`~/.dsh/profiles/desktop/package.json` 追加了 `dsh-task-workspace` 依赖与 bundle（备份 `package.json.bak`），但 `dsh --profile desktop --dump-config` 被应用独占拒绝，无法从命令行复核。
-
+0.2.0：新增 task_tidy / dsh-task tidy（工作区分类 + 索引 + 安全清理，默认 dry run）；readTask 目标支持回退到 ## 目标 段落；自测 41 项全过。
 ## 上线进展（2026-10-02）
 
 - GitHub 身份：实际账号是 **`Zilong6666`**（不是 zlren）。已把 `package.json`（author/repository/homepage/bugs）、`LICENSE`、`marketplace/*.yml`、`marketplace/PUBLISH.md` 内的 owner 全部改为 Zilong6666。
@@ -32,10 +25,7 @@
 
 ## 下一步
 
-- **市场 PR**：2026-10-03 07:45Z（北京时间 15:45）之后，用已备好的分支 `add-dsh-task-workspace`（最新 commit `20b6c0f`，含 tarball 字段）向 awesome-dsh-plugin 提 PR。
-- **用户重启 DSH 应用**后，cwd 修复才在桌面端生效（当前运行进程里仍是旧代码）。
-- 可选（不着急）：给 npm 账号 `grandparen` 开 2FA（用任意 TOTP 应用，npm 会同时给出可手输的 setup key）后再补一次 `npm publish`，让市场条目能走 npm 装法。
-- 可选清理：dsh plugin --profile web remove dsh-task-workspace（验证用的 web profile 安装）
+- 发 v0.2.0 Release 并更新市场条目 tarball URL
 
 ## 产出物
 
@@ -69,3 +59,5 @@
 | 2026-10-02 16:05 | npm 2FA 路线受阻（无验证器；granular token 页面 Select organizations 空列表卡死）→ 改用 GitHub Release tarball：建 `v0.1.0` 资产、市场条目加 `tarball:`、bundled pnpm 实测从 URL 安装成功；fork 分支更新为 `20b6c0f` |
 | 2026-10-02 15:50 | 修 `files` 缺 `skills`；删掉误建的两个空任务目录；fork awesome-dsh-plugin 并推分支 `add-dsh-task-workspace`（commit 8e5d01d），PR 待仓库满 1 天后开 |
 | 2026-10-02 15:30（会话整理任务中发现） | 修第四个真机 bug：四个工具 `execute(args)` 未接 `exec`、`rootFor(args.workspace, undefined)`，cwd 永远解析不到而退回 `process.cwd()`；改 `execute(args, exec)`+`rootFor(..., exec)`，`cwdFor` 增加 workspaceRegistry → agents.get → 会话日志首帧三级回退，`isBlockedRoot` 拒绝 DSH_HOME/DSH_PROFILE_DIR 及其子目录；补 3 项回归测试，自测 **35 passed** |
+- 加第 5 个工具 task_tidy + src/tidy.mjs + CLI tidy，补 6 项测试（35→41），文档同步，版本 0.2.0
+

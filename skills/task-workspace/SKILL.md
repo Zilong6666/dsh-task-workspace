@@ -42,6 +42,7 @@
 | `task_progress` | 覆盖更新进度文件（`summary` / `changelog` / `status` / `next` / `deliverables` / `goal`） |
 | `task_git` | 初始化或提交任务自己的仓库 |
 | `task_list` | 列出当前工作区已有的任务目录 |
+| `task_tidy` | 整理工作区：分类顶层条目、重写索引、清掉垃圾/缓存/空目录/越界任务目录（默认 dry run，`apply: true` 才删） |
 
 `task_progress` 与 `task_git` 都可以用 `task_dir`（目录）或 `task`（任务名片段）定位任务。
 
@@ -50,6 +51,7 @@
 ```bash
 dsh-task new "<任务名>" "<目标>" --git
 dsh-task progress "<任务目录|任务名>" --summary "做到哪了" --changelog "这次改了什么"
+dsh-task tidy [--apply]                          # 先看清单，确认后加 --apply 清理
 dsh-task git "<任务目录|任务名>" --message "chore: 初始化任务仓库"
 dsh-task list
 dsh-task config --root "<工作区根>"

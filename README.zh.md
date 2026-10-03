@@ -15,6 +15,7 @@
 | 工具 `task_progress` | 对那唯一的进度文件做整体覆盖更新；长摘要自动压缩；可选自动提交 |
 | 工具 `task_git` | `git init` + `.gitignore` + 首次提交，或追加一次提交 |
 | 工具 `task_list` | 列出当前工作区已有的任务目录 |
+| 工具 `task_tidy` | 给每个顶层条目分类，重写工作区索引，并清理系统垃圾 / 缓存 / 过期备份 / 空目录 / 越界遗留任务目录（默认 dry run，`apply: true` 才删） |
 | 命令行 `dsh-task` | 不用模型也能执行同样的操作 |
 
 ## 安装
@@ -91,6 +92,23 @@ dsh plugin --profile desktop add /绝对路径/dsh-task-workspace
 
 列出当前工作区的任务目录，含状态、最后更新时间、是否已建仓库。
 
+### `task_tidy`
+
+把工作区整理一遍：
+
+- 给每个顶层条目归类：任务 / 产出 / 中间产物 / 工具 / 配置 / 散落文件；
+- 覆盖重写索引文件（默认 `工作区索引.md`）：按类别列出大小、文件数、最后修改、任务状态与目标；
+- 单独报出大体积中间产物（超过 200 MB）但不动它们；
+- **默认 dry run，`apply: true` 才真正删除**，且只删可证明无用的东西：`.DS_Store` 一类系统垃圾、
+  `__pycache__` / `.pytest_cache`、`*.pyc` / `*.bak` / `*.orig` / `*.tmp` / `*.tgz`、嵌套空目录，
+  以及落在工作区之外、里面只有自身 `PROGRESS.md` 的任务目录（cwd 出错留下的）——不碰任务内容，不碰产出。
+
+```jsonc
+{ "workspace": "/path/to/workspace", "apply": true, "index": true }
+```
+
+> 索引每次运行都会整体重写，是给人读的，不要手工编辑。
+
 ## 命令行
 
 ```bash
@@ -154,7 +172,7 @@ profile 也可以在自己的补丁层覆盖同样的键：
 ## 开发与自测
 
 ```bash
-node test/run.mjs          # 35 项：store、工具、真实 git、CLI、宿主 JSON Schema 子集、会话 cwd 回退与内部目录护栏，不联网
+node test/run.mjs          # 41 项：store、工具、真实 git、CLI、宿主 JSON Schema 子集、会话 cwd 回退与内部目录护栏，不联网
 node test/run.mjs --keep   # 保留临时工作区便于检查
 ```
 

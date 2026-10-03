@@ -17,6 +17,7 @@ A DSH bundle that makes one convention stick: **one folder per task, exactly one
 | Tool `task_progress` | Whole-file overwrite of that one progress file; auto-compacts long summaries; optionally commits |
 | Tool `task_git` | `git init` + `.gitignore` + first commit, or a follow-up commit |
 | Tool `task_list` | What task folders already exist in this workspace |
+| Tool `task_tidy` | Classifies every top-level entry, rewrites the workspace index, and clears OS litter / caches / stale backups / empty folders / stray task folders (dry run unless `apply: true`) |
 | CLI `dsh-task` | The same operation without a model |
 
 ## Install
@@ -98,6 +99,26 @@ Initializes the repository with a `.gitignore` (`.DS_Store`, `__pycache__/`, `no
 Lists the task folders of the current workspace with status, last update time and
 whether the task has its own repository.
 
+### `task_tidy`
+
+Tidies the workspace the convention created it in:
+
+- classifies every top-level entry as 任务 / 产出 / 中间产物 / 工具 / 配置 / 散落文件;
+- rewrites the index file (`工作区索引.md` by default) — a table per category with
+  size, file count, last change, task status and goal;
+- reports the heavy intermediate folders (over 200 MB) without touching them;
+- **dry run unless `apply: true`**, and even then it only removes provably
+  disposable things: `.DS_Store` and friends, `__pycache__` / `.pytest_cache`,
+  `*.pyc` / `*.bak` / `*.orig` / `*.tmp` / `*.tgz`, empty nested folders, and a
+  task folder that landed outside the workspace holding nothing but its own
+  `PROGRESS.md` (the "wrong cwd" accident) — never task content, never a README.
+
+```jsonc
+{ "workspace": "/path/to/workspace", "apply": true, "index": true }
+```
+
+> The index is regenerated on every run and is meant to be read, not edited.
+
 ## CLI
 
 ```bash
@@ -162,7 +183,7 @@ The convention's trigger is deliberately explicit — any one of:
 ## Development
 
 ```bash
-node test/run.mjs          # 35 checks: store, tools, real git, CLI, host JSON Schema subset, session-cwd guards — no network
+node test/run.mjs          # 41 checks: store, tools, real git, CLI, host JSON Schema subset, session-cwd guards — no network
 node test/run.mjs --keep   # keep the temporary workspace for inspection
 ```
 

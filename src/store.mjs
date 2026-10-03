@@ -206,6 +206,7 @@ export function readTask(taskDir) {
   const stats = statSync(taskDir);
   const nameMatch = /^#\s+(.+)$/m.exec(content);
   const goalMatch = /^-\s*目标[:：]\s*(.+)$/m.exec(content);
+  const goalSection = /^##\s*目标\s*\n+([^\n#]+)/m.exec(content);
   const statusMatch = /^##\s*状态\s*\n+([^\n#]+)/m.exec(content);
   return {
     dir: taskDir,
@@ -213,7 +214,12 @@ export function readTask(taskDir) {
     progressFile,
     progressName: basename(progressFile),
     name: nameMatch === null ? basename(taskDir) : nameMatch[1].trim(),
-    goal: goalMatch === null ? '' : goalMatch[1].trim(),
+    goal:
+      goalMatch !== null
+        ? goalMatch[1].trim()
+        : goalSection !== null
+          ? goalSection[1].trim()
+          : '',
     status: statusMatch === null ? '' : statusMatch[1].trim(),
     bytes: Buffer.byteLength(content, 'utf8'),
     updatedAt: stats.mtime.toISOString(),

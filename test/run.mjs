@@ -176,7 +176,7 @@ process.stdout.write('\nplugin\n');
 const { ctx, state } = stubCtx();
 const dispose = plugin.default(ctx, {});
 check('registers one prompt section', () => assert.equal(state.sections.length, 1));
-check('registers four tools', () => assert.equal(state.tools.size, 4));
+check('registers five tools', () => assert.equal(state.tools.size, 5));
 check('prompt section states the convention', () => {
   const text = state.sections[0].text;
   assert.ok(text.includes('任务工作区约定'));
@@ -188,6 +188,7 @@ const taskNew = state.tools.get('task_new');
 const taskProgress = state.tools.get('task_progress');
 const taskGit = state.tools.get('task_git');
 const taskList = state.tools.get('task_list');
+const taskTidy = state.tools.get('task_tidy');
 
 // The host rejects a tool schema outside its enforced subset at registration
 // time (dsh-tools `assertSupportedJsonSchema`), which real boot once caught only
@@ -336,6 +337,102 @@ await checkAsync('a second task gets its own folder and index entry', async () =
 
 await checkAsync('task_git on a missing folder fails cleanly', async () => {
   await assert.rejects(() => callTool(taskGit, { task_dir: join(WORK_DIR, 'nope') }), /does not exist/);
+});
+
+// ------------------------------------------------------------------------- tidy
+process.stdout.write('\ntidy\n');
+const tidy = await import('../src/tidy.mjs');
+
+check('scanWorkspace classifies tasks, outputs, caches, tooling and config', () => {
+  const root = join(WORK_DIR, '整理测试');
+  mkdirSync(join(root, '有任务'), { recursive: true });
+  writeFileSync(join(root, '有任务', 'PROGRESS.md'), '# 有任务\n\n- 目标：把东西整理好\n\n## 状态\n\n进行中\n');
+  mkdirSync(join(root, '产出'), { recursive: true });
+  writeFileSync(join(root, '产出', 'README.md'), '# 产出\n');
+  mkdirSync(join(root, 'graphflow-out'), { recursive: true });
+  writeFileSync(join(root, 'graphflow-out', 'graph.json'), '{}');
+  mkdirSync(join(root, 'scripts'), { recursive: true });
+  mkdirSync(join(root, '.github'), { recursive: true });
+  writeFileSync(join(root, '说明.md'), '# 说明\n');
+  const scan = tidy.scanWorkspace(root, { home: HOME_DIR });
+  const byName = Object.fromEntries(scan.entries.map((entry) => [entry.name, entry]));
+  assert.equal(byName['有任务'].category, '任务');
+  assert.equal(byName['有任务'].goal, '把东西整理好');
+  assert.equal(byName['产出'].category, '产出');
+  assert.equal(byName['graphflow-out'].category, '中间产物');
+  assert.equal(byName['scripts'].category, '工具');
+  assert.equal(byName['.github'].category, '配置');
+  assert.equal(byName['说明.md'].category, '文档');
+  assert.equal(scan.totals.tasks, 1);
+});
+
+check('collectJunk finds OS litter, caches, backups and empty folders only', () => {
+  const root = join(WORK_DIR, '垃圾测试');
+  mkdirSync(join(root, 'sub', '__pycache__'), { recursive: true });
+  mkdirSync(join(root, 'sub', '空', '更空'), { recursive: true });
+  writeFileSync(join(root, '.DS_Store'), 'x');
+  writeFileSync(join(root, 'sub', '__pycache__', 'm.cpython-311.pyc'), 'x');
+  writeFileSync(join(root, 'sub', 'notes.md.bak'), 'x');
+  writeFileSync(join(root, 'sub', 'keep.md'), '# keep\n');
+  const junk = tidy.collectJunk(root);
+  const rels = junk.map((item) => item.rel).sort();
+  assert.deepEqual(rels, ['.DS_Store', 'sub/__pycache__', 'sub/notes.md.bak', 'sub/空']);
+  assert.equal(junk.some((item) => item.rel.includes('keep.md')), false, 'real content is never a candidate');
+});
+
+await checkAsync('applyCleanup removes the candidates and nothing else', async () => {
+  const root = join(WORK_DIR, '垃圾测试');
+  const scan = tidy.scanWorkspace(root, { home: HOME_DIR });
+  const { removed, freed_bytes } = tidy.applyCleanup(scan, { dryRun: false });
+  assert.ok(removed.length >= 4);
+  assert.ok(freed_bytes > 0);
+  assert.equal(existsSync(join(root, '.DS_Store')), false);
+  assert.equal(existsSync(join(root, 'sub', '__pycache__')), false);
+  assert.equal(existsSync(join(root, 'sub', '空')), false);
+  assert.equal(existsSync(join(root, 'sub', 'keep.md')), true);
+});
+
+check('renderIndex lists tasks with their status and stays regenerable', () => {
+  const root = join(WORK_DIR, '整理测试');
+  const scan = tidy.scanWorkspace(root, { home: HOME_DIR });
+  const markdown = tidy.renderIndex(scan, { removed: [{ bytes: 2048 }] });
+  assert.ok(markdown.startsWith('# 工作区索引'));
+  assert.ok(markdown.includes('| 有任务 |'), 'task row');
+  assert.ok(markdown.includes('进行中｜目标：把东西整理好'));
+  assert.ok(markdown.includes('上次清理：删除 1 项，释放 2.0 KB'));
+  const file = tidy.writeIndex(root, markdown);
+  assert.equal(file, join(root, '工作区索引.md'));
+  assert.equal(readFileSync(file, 'utf8'), markdown);
+});
+
+check('findStrayTasks only flags a stamped folder holding just its progress file', () => {
+  const home = join(WORK_DIR, '假home');
+  const stray = join(home, 'profiles', 'desktop', '会话日志回退-20261002');
+  mkdirSync(stray, { recursive: true });
+  writeFileSync(join(stray, 'PROGRESS.md'), '# 越界任务\n');
+  const real = join(home, 'profiles', 'desktop', '真任务-20261002');
+  mkdirSync(real, { recursive: true });
+  writeFileSync(join(real, 'PROGRESS.md'), '# 真任务\n');
+  writeFileSync(join(real, 'data.csv'), 'a,b\n');
+  const strays = tidy.findStrayTasks({ home });
+  assert.deepEqual(
+    strays.map((item) => item.path),
+    [stray],
+  );
+});
+
+await checkAsync('task_tidy reports a dry run, writes the index, then applies', async () => {
+  const dry = await callTool(taskTidy, { workspace: WORK_DIR });
+  assert.equal(dry.applied, false);
+  assert.equal(dry.root, WORK_DIR);
+  assert.ok(dry.entry_count >= 2);
+  assert.ok(existsSync(dry.index_file));
+  assert.ok(readFileSync(dry.index_file, 'utf8').includes('# 工作区索引'));
+  const applied = await callTool(taskTidy, { workspace: WORK_DIR, apply: true });
+  assert.equal(applied.applied, true);
+  for (const rel of applied.removed) {
+    assert.equal(existsSync(join(WORK_DIR, rel)), false, `${rel} should be gone`);
+  }
 });
 
 check('dispose unregisters everything', () => {
