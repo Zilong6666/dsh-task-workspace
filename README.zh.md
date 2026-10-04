@@ -1,6 +1,6 @@
 # dsh-task-workspace
 
-给 DSH 加一条落得下地的工程约定：**一个任务一个目录，一个任务一个进度文件（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。**
+给 DSH 加一条落得下地的工程约定：**一个会话只用一个文件夹，一个任务一个进度文件（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。**
 
 - 英文文档：[README.md](./README.md)
 - 中文文档：本文件
@@ -11,7 +11,7 @@
 | --- | --- |
 | 提示词段落 `task-workspace` | 每一轮对话都带着这条约定，任何工作区都生效 |
 | 技能 `task-workspace-convention` | 同一份约定，可通过技能目录被检索到 |
-| 工具 `task_new` | 建 `<工作区根>/<任务名>-<YYYYMMDD>/PROGRESS.md`（可选顺手 `git init`） |
+| 工具 `task_new` | 建 `<工作区根>/<任务名>-<YYYYMMDD>/PROGRESS.md`（可选顺手 `git init`）；本会话已有目录时直接复用（`reused: true`） |
 | 工具 `task_progress` | 对那唯一的进度文件做整体覆盖更新；长摘要自动压缩；可选自动提交 |
 | 工具 `task_git` | `git init` + `.gitignore` + 首次提交，或追加一次提交 |
 | 工具 `task_list` | 列出当前工作区已有的任务目录 |
@@ -39,11 +39,14 @@ dsh plugin --profile desktop add /绝对路径/dsh-task-workspace
 ├── .dsh-tasks.json              # 轻量任务索引，写入时更新
 ├── 竞品调研-20261002/
 │   ├── PROGRESS.md              # 这个任务唯一的进度文件
+│   ├── .dsh-session.json        # 记录这个目录属于哪个会话
 │   ├── .git/                    # 只有「任务过长」时才有
 │   └── data/…                   # 任务产出
 └── etl-refactor-20261003/
     └── PROGRESS.md
 ```
+
+一个会话在此工作区最多只有一个文件夹：`.dsh-session.json` 记录归属，同一会话再调 `task_new` 会复用该目录（`reused: true`，目录名不变），索引里的 `sessionId` 作为兜底。
 
 `PROGRESS.md` 固定六段：目标 / 状态 / 当前进度 / 下一步 / 产出物 / 变更日志。
 
@@ -57,6 +60,7 @@ dsh plugin --profile desktop add /绝对路径/dsh-task-workspace
 
 - 建 `竞品调研-<当天日期>/` 及它的 `PROGRESS.md`；
 - 同一天重复调用是幂等的，返回已有任务；
+- **一个会话一个文件夹**：本会话已有任务目录时直接复用（`reused: true`，保留原目录名），不再新建第二个；本会话的所有改动都落在该目录内；
 - `force: true` 可接管同名但非空目录；
 - `slug` 可覆盖目录名。
 
@@ -173,7 +177,7 @@ profile 也可以在自己的补丁层覆盖同样的键：
 ## 开发与自测
 
 ```bash
-node test/run.mjs          # 42 项：store、工具、真实 git、CLI、宿主 JSON Schema 子集、会话 cwd 回退与内部目录护栏，不联网
+node test/run.mjs          # 47 项：store、工具、真实 git、CLI、宿主 JSON Schema 子集、会话复用（一会话一文件夹）与 cwd 回退、内部目录护栏，不联网
 node test/run.mjs --keep   # 保留临时工作区便于检查
 ```
 

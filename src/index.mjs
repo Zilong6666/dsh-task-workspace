@@ -114,6 +114,7 @@ const OUT_TASK = {
     name: { type: 'string' },
     goal: { type: 'string' },
     created: { type: 'boolean' },
+    reused: { type: 'boolean' },
     git: { type: 'string', enum: ['initialized', 'skipped', 'unchanged', 'failed'] },
     next_step: { type: 'string' },
   },
@@ -210,7 +211,7 @@ export function apply(ctx, config) {
         skills.register({
           name: 'task-workspace-convention',
           description:
-            'How to run long tasks in this workspace: one folder per task, one overwritten PROGRESS.md per task, its own git repo once the task runs long.',
+            'How to run long tasks in this workspace: one folder per session (a session reuses the folder it already owns), one overwritten PROGRESS.md per task, its own git repo once the task runs long.',
           whenToUse:
             'Use at the start of any multi-step task, any task that produces several files, or any task that may span sessions.',
           content: skillBody(cfg),
@@ -249,6 +250,26 @@ apply.inject = inject;
 export { inject };
 export default apply;
 
+/**
+ * The session id behind a tool call, when the host exposes one.
+ *
+ * `exec.agent.id` is the session id on DSH; the other spellings are cheap
+ * fallbacks for hosts that put it elsewhere.
+ */
+function sessionIdFor(exec) {
+  const candidates = [
+    exec?.agent?.id,
+    exec?.sessionId,
+    exec?.session?.id,
+    exec?.agent?.session?.id,
+    exec?.meta?.sessionId,
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  }
+  return undefined;
+}
+
 /** The convention, as prompt/skill text. */
 export function conventionText(cfg = DEFAULTS) {
   const trigger = GIT_TRIGGERS.join('；');
@@ -257,12 +278,13 @@ export function conventionText(cfg = DEFAULTS) {
     '',
     '处理任何多步骤任务时按此执行：',
     '',
-    '1. **开工先建目录**：调用 `task_new` 建 `<任务名>-<YYYYMMDD>/`（插件自动放在工作区根目录）。',
-    '2. **唯一进度文件**：每个任务只有一个 `PROGRESS.md`；每次有实质进展就调用 `task_progress` **整体覆盖更新**它，并把当次改动写入「变更日志」。',
-    '3. **过长即建 git**：满足任一条件（' +
+    '1. **一个会话只用一个文件夹**：每个会话在工作区里最多只出现一个任务文件夹（`task_new` 检测到本会话已有文件夹时会直接复用它，不再新建）；这个会话的所有产出与改动都放在该文件夹内完成。需要改到别的文件夹（改名、跨目录清理、修别的任务的文件）时，先把要动的清单和理由告诉用户，得到同意再动手。',
+    '2. **开工先建目录**：调用 `task_new` 建 `<任务名>-<YYYYMMDD>/`（插件自动放在工作区根目录）。',
+    '3. **唯一进度文件**：每个任务只有一个 `PROGRESS.md`；每次有实质进展就调用 `task_progress` **整体覆盖更新**它，并把当次改动写入「变更日志」。',
+    '4. **过长即建 git**：满足任一条件（' +
       trigger +
       '）就调用 `task_git` 在该任务目录内初始化仓库并提交。',
-    '4. **回填**：任务收尾时把结论写进「当前进度」与「产出物」，让后来者只读 `PROGRESS.md` 就能接手。',
+    '5. **回填**：任务收尾时把结论写进「当前进度」与「产出物」，让后来者只读 `PROGRESS.md` 就能接手。',
     '',
     '任务目录直接位于工作区根目录，不放 `tasks/` 之类的中间层。',
     cfg.defaultGit === true ? '当前配置为所有新任务默认建 git 仓库。' : '',
@@ -404,7 +426,7 @@ function taskNew(ctx, cfg, rootFor, author) {
   return defineTool({
     name: 'task_new',
     description:
-      'Start a task the workspace way: create <workspace>/<name>-<YYYYMMDD>/ with exactly one PROGRESS.md, and optionally its own git repository. Call this once at the beginning of any multi-step task, before writing other files.',
+      'Start a task the workspace way: create <workspace>/<name>-<YYYYMMDD>/ with exactly one PROGRESS.md, and optionally its own git repository. One session owns at most one folder: when this session already has a task folder here it is reused (reused=true) instead of creating a second one. Call this once at the beginning of any multi-step task, before writing other files.',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -427,7 +449,10 @@ function taskNew(ctx, cfg, rootFor, author) {
       schema: OUT_TASK,
       render: (_args, value) =>
         text(
-          `${value.created === true ? '已创建' : '已存在'}任务目录：${value.dir}\n进度文件：${value.progress_file}` +
+          (value.reused === true
+            ? `本会话已有任务目录，已复用：${value.dir}`
+            : `${value.created === true ? '已创建' : '已存在'}任务目录：${value.dir}`) +
+            `\n进度文件：${value.progress_file}` +
             (value.git !== undefined && value.git !== 'skipped' ? `\ngit：${value.git}` : '') +
             `\n下一步：${value.next_step ?? ''}`,
         ),
@@ -441,12 +466,13 @@ function taskNew(ctx, cfg, rootFor, author) {
     isConcurrencySafe: () => false,
     async execute(args, exec) {
       const root = rootFor(args.workspace, exec);
-      const { task, created } = createTask({
+      const { task, created, reused } = createTask({
         root,
         name: args.name,
         goal: args.goal ?? '',
         slug: args.slug,
         force: args.force === true,
+        sessionId: sessionIdFor(exec),
         template: typeof cfg.template === 'string' && cfg.template.length > 0 ? cfg.template : undefined,
       });
       let gitState = 'skipped';
@@ -468,11 +494,14 @@ function taskNew(ctx, cfg, rootFor, author) {
         name: task.name,
         goal: task.goal,
         created,
+        reused: reused === true,
         git: gitState,
         next_step:
-          created === true
-            ? '开始工作；每次有实质进展时用 task_progress 覆盖更新 PROGRESS.md。'
-            : '目录已存在，直接继续；用 task_progress 更新进度。',
+          reused === true
+            ? '本会话继续在这个目录里工作；所有产出与改动都放在这里，不要为同一会话再建第二个文件夹。'
+            : created === true
+              ? '开始工作；每次有实质进展时用 task_progress 覆盖更新 PROGRESS.md。'
+              : '目录已存在，直接继续；用 task_progress 更新进度。',
       };
     },
   });

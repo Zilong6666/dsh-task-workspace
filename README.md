@@ -1,8 +1,8 @@
 # dsh-task-workspace
 
-给 DSH 加一条落得下地的工程约定：**一个任务一个目录，一个任务一个进度文件（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。**
+给 DSH 加一条落得下地的工程约定：**一个会话只用一个文件夹，一个任务一个进度文件（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。**
 
-A DSH bundle that makes one convention stick: **one folder per task, exactly one progress file per task (overwritten on every update), and per-task git once the task runs long.**
+A DSH bundle that makes one convention stick: **one folder per session, exactly one progress file per task (overwritten on every update), and per-task git once the task runs long.**
 
 - 中文文档：[README.zh.md](./README.zh.md)
 - English docs: this file
@@ -13,7 +13,7 @@ A DSH bundle that makes one convention stick: **one folder per task, exactly one
 | --- | --- |
 | Prompt section `task-workspace` | The convention is present in every turn, always, in every workspace |
 | Skill `task-workspace-convention` | The same convention, discoverable through the skill catalog |
-| Tool `task_new` | Creates `<workspace>/<name>-<YYYYMMDD>/PROGRESS.md` (optionally `git init`) |
+| Tool `task_new` | Creates `<workspace>/<name>-<YYYYMMDD>/PROGRESS.md` (optionally `git init`); a session that already owns a folder reuses it (`reused: true`) instead of creating a second one |
 | Tool `task_progress` | Whole-file overwrite of that one progress file; auto-compacts long summaries; optionally commits |
 | Tool `task_git` | `git init` + `.gitignore` + first commit, or a follow-up commit |
 | Tool `task_list` | What task folders already exist in this workspace |
@@ -42,11 +42,16 @@ Then restart the profile (or start a new session) so the bundle patch is compose
 ├── .dsh-tasks.json              # small task index, rebuilt/updated on write
 ├── 竞品调研-20261002/
 │   ├── PROGRESS.md              # the ONLY progress file of this task
+│   ├── .dsh-session.json        # which session owns this folder
 │   ├── .git/                    # only when the task ran long
 │   └── data/…                   # task output
 └── etl-refactor-20261003/
     └── PROGRESS.md
 ```
+
+One session owns at most one folder here. `.dsh-session.json` records the owner;
+`task_new` from the same session reuses that folder (`reused: true`, the original
+name is kept) and the workspace index carries the same `sessionId` as a fallback.
 
 `PROGRESS.md` always has the same six sections: 目标 / 状态 / 当前进度 / 下一步 / 产出物 / 变更日志
 (goal / status / current progress / next steps / deliverables / changelog).
@@ -61,6 +66,9 @@ Then restart the profile (or start a new session) so the bundle patch is compose
 
 - Creates `竞品调研-<today>/` and its `PROGRESS.md`.
 - Idempotent for the same day: calling it again returns the existing task.
+- **One folder per session**: when this session already owns a task folder in the
+  workspace, that folder is reused (`reused: true`, folder name unchanged) rather
+  than creating a second one — every change of this session stays inside it.
 - `force: true` adopts an existing non-empty folder of the same name.
 - `slug` overrides the folder slug.
 
@@ -185,7 +193,7 @@ The convention's trigger is deliberately explicit — any one of:
 ## Development
 
 ```bash
-node test/run.mjs          # 42 checks: store, tools, real git, CLI, host JSON Schema subset, session-cwd guards — no network
+node test/run.mjs          # 47 checks: store, tools, real git, CLI, host JSON Schema subset, session reuse + session-cwd guards — no network
 node test/run.mjs --keep   # keep the temporary workspace for inspection
 ```
 

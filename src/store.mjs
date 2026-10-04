@@ -3,8 +3,9 @@
  *
  * The on-disk contract this plugin enforces, for one workspace directory:
  *
- *   <workspace>/<slug>-<YYYYMMDD>/          one folder per task
+ *   <workspace>/<slug>-<YYYYMMDD>/          one folder per task (one per session)
  *     PROGRESS.md                           the single progress file of that task
+ *     .dsh-session.json                     which session owns this folder
  *   <workspace>/.dsh-tasks.json             lightweight task index (rebuilt on demand)
  *
  * A task *may* carry its own git repository (created with `task_git`); nothing
@@ -32,6 +33,12 @@ export const PROGRESS_NAMES = ['PROGRESS.md', '进度.md'];
 
 /** Name of the workspace-level task index. */
 export const INDEX_NAME = '.dsh-tasks.json';
+
+/**
+ * Name of the per-task session marker. It records which session owns the
+ * folder, so one session never spawns a second folder in the same workspace.
+ */
+export const SESSION_MARKER = '.dsh-session.json';
 
 /** Reasons a task is considered "long enough" to deserve its own git repository. */
 export const GIT_TRIGGERS = [
@@ -273,6 +280,97 @@ export function touchIndex(root, record) {
   return writeIndex(root, index);
 }
 
+/** Read the session marker of a task directory (best effort). */
+export function readSessionMarker(taskDir) {
+  try {
+    const file = join(taskDir, SESSION_MARKER);
+    if (!existsSync(file)) return undefined;
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Keep the session marker out of a task's git history.
+ *
+ * The marker is local bookkeeping, not task content: it goes into
+ * `.git/info/exclude` (never tracked, never committed) so an existing
+ * repository stays clean without editing its tracked `.gitignore`.
+ */
+export function ignoreSessionMarkerInGit(taskDir) {
+  try {
+    const info = join(taskDir, '.git', 'info');
+    if (!existsSync(join(taskDir, '.git'))) return false;
+    mkdirSync(info, { recursive: true });
+    const exclude = join(info, 'exclude');
+    const current = existsSync(exclude) ? readFileSync(exclude, 'utf8') : '';
+    if (current.split(/\r?\n/).some((line) => line.trim() === SESSION_MARKER)) return false;
+    const tail = current.length === 0 || current.endsWith('\n') ? '' : '\n';
+    writeFileSync(exclude, `${current}${tail}${SESSION_MARKER}\n`, 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Record which session owns a task folder. A missing or unreadable marker is
+ * never fatal: a read-only workspace still works, it just loses the guard.
+ */
+export function writeSessionMarker(taskDir, { sessionId, root, name } = {}) {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined;
+  const previous = readSessionMarker(taskDir) ?? {};
+  const now = new Date().toISOString();
+  const body = {
+    sessionId,
+    ...(typeof root === 'string' && root.length > 0 ? { root } : {}),
+    ...(typeof name === 'string' && name.length > 0 ? { name } : {}),
+    ...(typeof previous.createdAt === 'string' ? { createdAt: previous.createdAt } : { createdAt: now }),
+    updatedAt: now,
+  };
+  try {
+    const file = join(taskDir, SESSION_MARKER);
+    writeFileSync(file, `${JSON.stringify(body, null, 2)}\n`, 'utf8');
+    ignoreSessionMarkerInGit(taskDir);
+    return file;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The task folder a session already owns in this workspace, if any.
+ *
+ * The marker inside the folder wins; the workspace index is the fallback, so
+ * the guard survives a deleted marker and vice versa.
+ */
+export function findTaskBySession(root, sessionId) {
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined;
+  let entries = [];
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+    const marker = readSessionMarker(join(root, entry.name));
+    if (marker === undefined || marker.sessionId !== sessionId) continue;
+    const task = readTask(join(root, entry.name));
+    if (task !== undefined) return task;
+  }
+  const index = readIndex(root);
+  for (const [folder, rec] of Object.entries(index.tasks)) {
+    if (rec === null || typeof rec !== 'object' || rec.sessionId !== sessionId) continue;
+    const task = readTask(join(root, folder));
+    if (task !== undefined) return task;
+  }
+  return undefined;
+}
+
 /** Fill the progress template for a task. */
 export function renderProgress({ taskName, goal, dir, date, template = PROGRESS_TEMPLATE }) {
   const values = {
@@ -291,7 +389,11 @@ export function renderProgress({ taskName, goal, dir, date, template = PROGRESS_
 /**
  * Create (or adopt) a task directory and write its single progress file.
  *
- * @returns {{task: object, created: boolean, indexFile: string|undefined}}
+ * One session owns at most one folder: when `sessionId` is given and that
+ * session already has a task folder here, it is reused instead of creating a
+ * second one (the folder keeps its original name).
+ *
+ * @returns {{task: object, created: boolean, reused: boolean, indexFile: string|undefined}}
  */
 export function createTask({
   root,
@@ -302,12 +404,26 @@ export function createTask({
   template,
   force = false,
   offsetMinutes = 480,
+  sessionId,
 }) {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new Error('task name is required');
   }
   const tasksRoot = resolve(root);
   mkdirSync(tasksRoot, { recursive: true });
+
+  if (typeof sessionId === 'string' && sessionId.length > 0) {
+    const owned = findTaskBySession(tasksRoot, sessionId);
+    if (owned !== undefined) {
+      return {
+        task: owned,
+        created: false,
+        reused: true,
+        indexFile: touchIndex(tasksRoot, record(owned, name, goal, sessionId)),
+      };
+    }
+  }
+
   const day = date ?? compactDate(offsetMinutes);
   const folder = taskFolderName(slug ?? name, day);
   const dir = join(tasksRoot, folder);
@@ -315,7 +431,15 @@ export function createTask({
   if (existsSync(dir)) {
     const existing = readTask(dir);
     if (existing !== undefined) {
-      return { task: existing, created: false, indexFile: touchIndex(tasksRoot, record(existing, name, goal)) };
+      if (typeof sessionId === 'string' && sessionId.length > 0) {
+        writeSessionMarker(dir, { sessionId, root: tasksRoot, name: name.trim() });
+      }
+      return {
+        task: existing,
+        created: false,
+        reused: false,
+        indexFile: touchIndex(tasksRoot, record(existing, name, goal, sessionId)),
+      };
     }
     if (!force) {
       const names = readdirSync(dir);
@@ -341,17 +465,26 @@ export function createTask({
     }),
     'utf8',
   );
+  if (typeof sessionId === 'string' && sessionId.length > 0) {
+    writeSessionMarker(dir, { sessionId, root: tasksRoot, name: name.trim() });
+  }
   const task = readTask(dir);
-  return { task, created: true, indexFile: touchIndex(tasksRoot, record(task, name, goal)) };
+  return {
+    task,
+    created: true,
+    reused: false,
+    indexFile: touchIndex(tasksRoot, record(task, name, goal, sessionId)),
+  };
 }
 
-function record(task, name, goal) {
+function record(task, name, goal, sessionId) {
   return {
     id: newTaskId(),
     folder: task.folder,
     name: task.name || name,
     goal: goal.trim(),
     createdAt: task.updatedAt,
+    ...(typeof sessionId === 'string' && sessionId.length > 0 ? { sessionId } : {}),
   };
 }
 
@@ -518,10 +651,11 @@ export function gitForTask(taskDir, { message, author, init = true, add = ['-A']
     runGit(root, ['init', '--quiet']);
     writeFileSync(
       join(root, '.gitignore'),
-      ['.DS_Store', '__pycache__/', '*.pyc', 'node_modules/', '.venv/', '*.tmp'].join('\n') + '\n',
+      ['.DS_Store', '__pycache__/', '*.pyc', 'node_modules/', '.venv/', '*.tmp', SESSION_MARKER].join('\n') + '\n',
       'utf8',
     );
   }
+  ignoreSessionMarkerInGit(root);
   runGit(root, ['add', ...add]);
   const staged = runGit(root, ['diff', '--cached', '--name-only']).trim();
   const hasChanges = staged.length > 0;

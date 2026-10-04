@@ -83,13 +83,13 @@ function stubCtx({ withSkills = true, withRegistry = false } = {}) {
   return { ctx, state };
 }
 
-function callTool(tool, args) {
+function callTool(tool, args, sessionId = 's1') {
   return tool.execute(args, {
     callId: 'test',
     name: tool.name,
     arguments: args,
     signal: new AbortController().signal,
-    agent: { id: 's1' },
+    agent: { id: sessionId },
   });
 }
 
@@ -325,14 +325,66 @@ await checkAsync('task_list reports the task', async () => {
   assert.equal(result.tasks[0].git, true);
 });
 
-await checkAsync('a second task gets its own folder and index entry', async () => {
-  const second = await callTool(taskNew, { name: 'Second Task', goal: 'g', init_git: true });
+await checkAsync('a second session gets its own folder and index entry', async () => {
+  const second = await callTool(taskNew, { name: 'Second Task', goal: 'g', init_git: true }, 's2');
   assert.match(second.folder, /^Second-Task-\d{8}$/);
   assert.equal(second.git, 'initialized');
+  assert.equal(second.reused, false);
   const listed = await callTool(taskList, {});
   assert.equal(listed.count, 2);
   const index = JSON.parse(readFileSync(join(WORK_DIR, '.dsh-tasks.json'), 'utf8'));
   assert.equal(Object.keys(index.tasks).length, 2);
+});
+
+await checkAsync('task_new reuses the folder this session already owns', async () => {
+  const first = await callTool(taskNew, { name: '复用测试', goal: '第一轮' }, 's3');
+  assert.equal(first.created, true);
+  assert.equal(first.reused, false);
+  assert.ok(existsSync(join(first.dir, '.dsh-session.json')), 'the folder records its owning session');
+  const again = await callTool(taskNew, { name: '复用测试第二阶段', goal: '第二轮' }, 's3');
+  assert.equal(again.reused, true);
+  assert.equal(again.created, false);
+  assert.equal(again.dir, first.dir, 'one session never gets a second folder');
+  assert.equal(again.folder, first.folder, 'the original folder name is kept');
+  assert.equal(existsSync(join(first.dir, 'PROGRESS.md')), true);
+  assert.equal(readFileSync(join(first.dir, 'PROGRESS.md'), 'utf8').includes('复用测试第二阶段'), false);
+  const listed = await callTool(taskList, {});
+  assert.equal(listed.count, 3, 'the reuse added no folder and no index entry');
+});
+
+await checkAsync('a fresh session still gets a new folder', async () => {
+  const other = await callTool(taskNew, { name: '会话隔离测试', goal: 'g' }, 's4');
+  assert.equal(other.created, true);
+  assert.equal(other.reused, false);
+  assert.match(other.folder, /^会话隔离测试-\d{8}$/);
+});
+
+check('findTaskBySession reads the marker and ignores other sessions', () => {
+  assert.equal(store.readSessionMarker(created.dir).sessionId, 's1');
+  assert.equal(store.findTaskBySession(WORK_DIR, 's1').dir, created.dir);
+  assert.equal(store.findTaskBySession(WORK_DIR, 'nobody'), undefined);
+});
+
+await checkAsync('the session marker stays out of a task repository', async () => {
+  const made = await callTool(taskNew, { name: 'marker-git', goal: 'g', init_git: true }, 's5');
+  assert.ok(existsSync(join(made.dir, '.dsh-session.json')));
+  const status = execFileSync('git', ['status', '--porcelain'], { cwd: made.dir, encoding: 'utf8' });
+  assert.equal(status.trim(), '', 'the marker is excluded, not committed');
+  const tracked = execFileSync('git', ['ls-files'], { cwd: made.dir, encoding: 'utf8' });
+  assert.equal(tracked.includes('.dsh-session.json'), false);
+  assert.ok(readFileSync(join(made.dir, '.gitignore'), 'utf8').includes('.dsh-session.json'));
+  const reused = await callTool(taskNew, { name: 'marker-git again', goal: 'g' }, 's5');
+  assert.equal(reused.reused, true);
+  assert.equal(reused.dir, made.dir);
+});
+
+check('findTaskBySession falls back to the workspace index', () => {
+  const root = join(WORK_DIR, '索引回退');
+  mkdirSync(root, { recursive: true });
+  const made = store.createTask({ root, name: '索引任务', goal: 'g', sessionId: 's-index' });
+  rmSync(join(made.task.dir, '.dsh-session.json'));
+  assert.equal(store.findTaskBySession(root, 's-index').dir, made.task.dir);
+  assert.equal(store.findTaskBySession(root, 'other'), undefined);
 });
 
 await checkAsync('task_git on a missing folder fails cleanly', async () => {

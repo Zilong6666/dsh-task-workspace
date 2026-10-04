@@ -2,7 +2,7 @@
 /**
  * dsh-task-workspace CLI — the same convention, usable without a model.
  *
- *   dsh-task new "<任务名>" ["<目标>"] [--git] [--slug s] [--root DIR] [--force]
+ *   dsh-task new "<任务名>" ["<目标>"] [--git] [--slug s] [--session id] [--root DIR] [--force]
  *   dsh-task progress <任务目录|任务名> [--summary TEXT] [--changelog TEXT]
  *                                 [--status S] [--next TEXT] [--deliverables TEXT]
  *                                 [--goal TEXT] [--no-commit] [--root DIR]
@@ -36,7 +36,7 @@ import { DEFAULTS, loadConfig, saveConfig } from './index.mjs';
 const USAGE = `dsh-task — 任务工作区约定 CLI
 
 用法：
-  dsh-task new "<任务名>" ["<目标>"] [--git] [--slug <slug>] [--force] [--root <目录>]
+  dsh-task new "<任务名>" ["<目标>"] [--git] [--slug <slug>] [--session <会话id>] [--force] [--root <目录>]
   dsh-task progress <任务目录|任务名> [--summary <文本>] [--changelog <文本>]
                     [--status <状态>] [--next <文本>] [--deliverables <文本>]
                     [--goal <文本>] [--no-commit] [--root <目录>]
@@ -104,12 +104,13 @@ function cmdNew(args) {
   const [name, goal] = args.positionals;
   if (name === undefined) throw new Error('用法：dsh-task new "<任务名>" ["<目标>"]');
   const cfg = loadConfig();
-  const { task, created } = createTask({
+  const { task, created, reused } = createTask({
     root: rootDir,
     name,
     goal: goal ?? '',
     slug: flag(args.flags, 'slug'),
     force: args.flags.force === true,
+    sessionId: flag(args.flags, 'session'),
     template: typeof cfg.template === 'string' && cfg.template.length > 0 ? cfg.template : undefined,
   });
   let gitLine = '';
@@ -117,7 +118,8 @@ function cmdNew(args) {
     const result = gitForTask(task.dir, { author: gitAuthor(cfg.gitAuthor) });
     gitLine = `\ngit: ${result.initialized ? '已初始化仓库' : '仓库已存在'}${result.committed ? `，已提交 ${result.head}` : ''}`;
   }
-  process.stderr.write(`${created ? '已创建' : '已存在'}任务目录：${task.dir}\n进度文件：${task.progressFile}${gitLine}\n`);
+  const head = reused === true ? '本会话已有任务目录，已复用' : created ? '已创建' : '已存在';
+  process.stderr.write(`${head}任务目录：${task.dir}\n进度文件：${task.progressFile}${gitLine}\n`);
   process.stdout.write(`${task.dir}\n`);
 }
 

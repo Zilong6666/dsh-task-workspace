@@ -19,7 +19,7 @@ cd /Users/zlren/Desktop/deepseekai工作区/按任务分文件夹与进度文件
 # 仓库名必须是 dsh-task-workspace（与 package.json 的 repository 字段一致，
 # 也决定市场条目里的 url 与文件名）
 gh repo create Zilong6666/dsh-task-workspace --public --source=. --remote=origin \
-  --description "Task workspace convention for DSH: one folder per task, one overwritten PROGRESS.md, per-task git."
+  --description "Task workspace convention for DSH: one folder per session, one overwritten PROGRESS.md, per-task git."
 
 git -c user.name="Zilong6666" -c user.email="<你的邮箱>" add -A
 git -c user.name="Zilong6666" -c user.email="<你的邮箱>" commit -m "feat: 任务工作区约定插件（提示词段落 + 4 个工具 + 技能）"
@@ -70,7 +70,7 @@ git commit -m "add Zilong6666/dsh-task-workspace"
 git push -u origin add-dsh-task-workspace
 gh pr create --repo awesome-dsh-plugin/awesome-dsh-plugin \
   --title "add Zilong6666/dsh-task-workspace" \
-  --body "Task workspace convention: one folder per task, one overwritten PROGRESS.md per task, per-task git once the task runs long."
+  --body "Task workspace convention: one folder per session, one overwritten PROGRESS.md per task, per-task git once the task runs long."
 ```
 
 条目文件内容（已备好，可直接用）：
@@ -80,8 +80,8 @@ url: https://github.com/Zilong6666/dsh-task-workspace
 name: Zilong6666/dsh-task-workspace
 category: workflow
 description:
-  en: 'Task workspace convention: one folder per task, one PROGRESS.md per task overwritten on each update, and per-task git once the task runs long.'
-  zh: '任务工作区约定：一个任务一个目录，一个任务一个 PROGRESS.md（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。'
+  en: 'Task workspace convention: one folder per session, one PROGRESS.md per task overwritten on each update, and per-task git once the task runs long.'
+  zh: '任务工作区约定：一个会话只用一个文件夹，一个任务一个 PROGRESS.md（每次修改整体覆盖更新），任务过长就在任务目录里建 git 仓库。'
 ```
 
 ## 4. 上架前自查表（对着 contributing.md）
